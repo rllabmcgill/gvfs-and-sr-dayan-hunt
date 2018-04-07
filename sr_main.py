@@ -19,10 +19,15 @@ MAZE_R2 = ['#####',
 		   '#   #',
 		   '#####']
 
-SIMPLE_MAZE = ['####',
-	 		   '#P #',
-			   '# G#',
-			   '####']
+SIMPLE_MAZE_R1 = ['####',
+	 		      '#P #',
+			      '# G#',
+			      '####']
+
+SIMPLE_MAZE_R2 = ['####',
+	 		      '#P #',
+			      '#G #',
+			      '####']
 
 def flat2xy(f):
 	f = f + 1 # f indexes from 0, gridworld indexes from 1
@@ -40,21 +45,6 @@ def random_policy(rnd):
 	action = rnd.randint(0,4,1)[0]
 	return action
 
-# e-greedy algorithm for choosing next action
-def eps_greedy(S, Q, eps, rnd1, rnd2, rnd4):
-
-	uni_rnd = rnd1.uniform(0.0,1.0)
-	if uni_rnd > eps:
-		# check for highest Q
-		# Break ties with coin flip
-		action = rnd4.choice(np.flatnonzero(Q[S,:] == Q[S,:].max()))
-		# action = Q[S,:].argmax()
-	else:
-		# choose from our 4 different possible actions randomly:
-		action = rnd2.randint(0,4,1)[0]
-
-	return action
-
 def parse_obs(obs, nrow, ncol):
 
 	state_mtx = np.array(obs.layers['P'], dtype=np.float)
@@ -65,12 +55,12 @@ def parse_obs(obs, nrow, ncol):
 
 def setup_maze(maze_type, start_row, start_col):
 
-	if maze_type == 'SIMPLE_MAZE':
-		maze_init = mazes.make_maze(SIMPLE_MAZE)
-		maze_update = mazes.make_maze(SIMPLE_MAZE)
+	if maze_type == 'SIMPLE_MAZE_R1':
+		maze_init = mazes.make_maze(SIMPLE_MAZE_R1, 'SIMPLE_MAZE_R1')
+		maze_update = mazes.make_maze(SIMPLE_MAZE_R2, 'SIMPLE_MAZE_R2')
 	elif maze_type == 'MAZE_R1':
-		maze_init = mazes.make_maze(MAZE_R1)
-		maze_update = mazes.make_maze(MAZE_R2)
+		maze_init = mazes.make_maze(MAZE_R1, 'MAZE_R1')
+		maze_update = mazes.make_maze(MAZE_R2, 'MAZE_R2')
 
 	# Place engines in play mode
 	maze_init.its_showtime()
@@ -181,19 +171,19 @@ def run_learning_sr(config):
 
 	return result
 
-# Switching for later
-def run_experiment(config):
+def run_learning_sr_switch(config):
 
 	# Initializations
+	maze_type = config['maze_type']
 	terminal_step = config['terminal_step']
 	switch_step = config['switch_reward_at_step']
 
+	episode_len = config['episode_length']
 	nrow = config['maze_params']['row']
 	ncol = config['maze_params']['col']
 	start_row = config['maze_params']['start_row']
 	start_col = config['maze_params']['start_col']
 
-	eps = config['policy_params']['epsilon']
 	alpha = config['learning_alg_params']['alpha']
 	gamma = config['learning_alg_params']['gamma']
 
@@ -202,32 +192,38 @@ def run_experiment(config):
 	reward_len = 2
 
 	# Don't need all these guys
-	rnd1 = np.random.RandomState(24)
-
+	rnd = np.random.RandomState(24)
 
 	S = xy2flat(start_row, start_col)
 	S_prime = S
 
 	# Initialize mazes (r_1, r_2) and agent at starting position
-	maze_init, maze_update = setup_maze(start_row, start_col)
+	maze_init, maze_update = setup_maze(maze_type, start_row, start_col)
 	curr_maze = maze_init
 
 	step = 0
 	episode = 0
+	episode_step = 0
 	result = OrderedDict()
 
 	cum_reward = 0
 	cum_reward_lst = []
 
+	Phi_pi = np.zeros((state_len, state_len))
+	V_pi = np.zeros((state_len,1))
+	result['config'] = config
+
+
 	while step < terminal_step:
 
 		# Reset episode:
-		if curr_maze._game_over:
+		if episode_step >= episode_len:
 			S = xy2flat(start_row, start_col)
 			S_prime = S
-			maze_init, maze_update = setup_maze(start_row, start_col)
+			maze_init, maze_update = setup_maze(maze_type, start_row, start_col)
 			curr_maze = maze_init # only doing this to reset the agent to the starting position, the next if statement will actually correct the map if need be
 
+			episode_step = 0
 			episode += 1
 
 		# The maze evolves after switch_step:
@@ -240,44 +236,21 @@ def run_experiment(config):
 			maze_update._sprites_and_drapes['P']._teleport((old_row, old_col))
 			curr_maze = maze_update
 
-		# Get current state S
-		S = S_prime
+		if curr_maze._game_over:
+			A = random_policy(rnd)
+			R = 0.
+			S_prime = S
+		else:
+			# Select Action A using a uniform random policy
+			A = random_policy(rnd)
 
-		# Select Action A using epsilon-greedy (given S, Q)
-		A = eps_greedy(S, Q, eps, rnd1, rnd2, rnd4)
+			# Apply action A to current maze, get reward R, and new state S'
+			obs, R, _ = curr_maze.play(A)
+			S_prime = parse_obs(obs, nrow, ncol)
 
-		# Apply action A to current maze, get reward R, and new state S'
-		obs, R, _ = curr_maze.play(A)
-		S_prime = parse_obs(obs)
-
-		# Update Q function
-		Q[S,A] = Q[S,A] + alpha*( R + gamma*Q[S_prime,:].max() - Q[S,A] )
-
-		# Update Model with R, S_prime for a particular state action pair
-		model[(S,A)] = (R, S_prime)
-
-		if arch == 'dyna_q_plus':
-			visited_step[(S,A)] = step
-
-		# Loop sim_epoch times (simulation):
-		for i in range(sim_epoch):
-			# Get random previously observed state S
-			# Get random previously taken action A for that state S
-			rnd_S, rnd_A = model.keys()[ rnd3.randint(0, len(model), 1)[0] ]
-
-			# Extract reward R and next state S' for that action A from Model
-			sim_R, sim_S_prime = model[(rnd_S, rnd_A)]
-
-			if arch == 'dyna_q_plus':
-				tau = step - visited_step[(rnd_S, rnd_A)]
-				sim_R += kappa*sqrt(tau)
-
-			# Update Q function
-			Q[rnd_S, rnd_A] = Q[rnd_S,rnd_A] + alpha*( sim_R + gamma*Q[sim_S_prime,:].max() - Q[rnd_S, rnd_A] )
-
-
-		cum_reward += R
-		cum_reward_lst.append(cum_reward)
+		for j in range(state_len):
+			Phi_pi[S, j] = Phi_pi[S, j] + alpha*(indicator(S,j) + gamma*Phi_pi[S_prime, j] - Phi_pi[S, j])
+			V_pi[S] = V_pi[S] + alpha*(R + gamma*V_pi[S_prime] - V_pi[S])
 
 		experience = {
 			'S' : S,
@@ -286,16 +259,20 @@ def run_experiment(config):
 			'S_prime' : S_prime
 		}
 		result[step] = {
-			'config' : config,
-			'episode' : episode,
-			'experience' : experience,
-			'value_function' : Q.copy(),
-			'observation' : obs
+			'Phi_pi' : Phi_pi.copy(),
+			'V_pi' : V_pi.copy(),
+			'experience': experience
+
 		}
 
+		# Update to new state
+		S = S_prime
+
 		step += 1
+		episode_step += 1
 
 	return result
+
 
 
 def main(argv):

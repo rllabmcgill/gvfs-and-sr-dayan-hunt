@@ -84,14 +84,14 @@ class PlayerSpriteR2(prefab_sprites.MazeWalker):
             self._east(board, the_plot)
 
         # See if we've found the goal:
-        if self.position == (2, 1):
-            the_plot.add_reward(0.0)
+        if self.position == (2, 2):
+            the_plot.add_reward(1.0)
             the_plot.terminate_episode()
             # print("Terminating episode..")
             # time.sleep(10)
 
         else:
-            the_plot.add_reward(-1.0)
+            the_plot.add_reward(0.0)
 
 
 # Human control (for testing purposes):

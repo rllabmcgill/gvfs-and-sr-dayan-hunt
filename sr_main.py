@@ -7,27 +7,15 @@ from math import sqrt
 import matplotlib.pyplot as plt
 from collections import OrderedDict
 
-MAZE_R1 = ['#####',
-           '#P  #',
-           '#   #',
-           '# G #',
-           '#####']
+twobytwo_R1 = ['####',
+               '#P #',
+               '# G#',
+               '####']
 
-MAZE_R2 = ['#####',
-           '#P  #',
-           '#  G#',
-           '#   #',
-           '#####']
-
-SIMPLE_MAZE_R1 = ['####',
-                  '#P #',
-                  '# G#',
-                  '####']
-
-SIMPLE_MAZE_R2 = ['####',
-                  '#P #',
-                  '#G #',
-                  '####']
+twobytwo_R2 = ['####',
+               '#P #',
+               '#G #',
+               '####']
 
 
 def flat2xy(f):
@@ -58,12 +46,9 @@ def parse_obs(obs, nrow, ncol):
 
 def setup_maze(maze_type, start_row, start_col):
 
-    if maze_type == 'SIMPLE_MAZE_R1':
-        maze_init = mazes.make_maze(SIMPLE_MAZE_R1, 'SIMPLE_MAZE_R1')
-        maze_update = mazes.make_maze(SIMPLE_MAZE_R2, 'SIMPLE_MAZE_R2')
-    elif maze_type == 'MAZE_R1':
-        maze_init = mazes.make_maze(MAZE_R1, 'MAZE_R1')
-        maze_update = mazes.make_maze(MAZE_R2, 'MAZE_R2')
+    if maze_type == 'twobytwo':
+        maze_init = mazes.make_maze(twobytwo_R1, 'twobytwo_R1')
+        maze_update = mazes.make_maze(twobytwo_R2, 'twobytwo_R2')
 
     # Place engines in play mode
     maze_init.its_showtime()
@@ -85,98 +70,10 @@ def indicator(s, j):
 
 
 # Track2 Q1
-def run_learning_sr(config):
+def run_experiment(config):
 
     # Initializations
-    maze_type = config['maze_type']
-    terminal_step = config['terminal_step']
-
-    episode_len = config['episode_length']
-    nrow = config['maze_params']['row']
-    ncol = config['maze_params']['col']
-    start_row = config['maze_params']['start_row']
-    start_col = config['maze_params']['start_col']
-
-    alpha = config['learning_alg_params']['alpha']
-    gamma = config['learning_alg_params']['gamma']
-
-    state_len = nrow*ncol
-    action_len = 4
-    reward_len = 2
-
-    # Don't need all these guys
-    rnd = np.random.RandomState(24)
-
-    S = xy2flat(start_row, start_col)
-    S_prime = S
-
-    # Initialize mazes (r_1, r_2) and agent at starting position
-    maze_init, _ = setup_maze(maze_type, start_row, start_col)
-    curr_maze = maze_init
-
-    step = 0
-    episode = 0
-    episode_step = 0
-    result = OrderedDict()
-
-    cum_reward = 0
-    cum_reward_lst = []
-
-    Phi_pi = np.zeros((state_len, state_len))
-    V_pi = np.zeros((state_len,1))
-    result['config'] = config
-
-    while step < terminal_step:
-
-        # Reset episode:
-        if episode_step >= episode_len:
-            S = xy2flat(start_row, start_col)
-            S_prime = S
-            maze_init, _ = setup_maze(maze_type, start_row, start_col)
-            curr_maze = maze_init # only doing this to reset the agent to the starting position, the next if statement will actually correct the map if need be
-
-            episode_step = 0
-            episode += 1
-
-        if curr_maze._game_over:
-            A = random_policy(rnd)
-            R = 0.
-            S_prime = S
-        else:
-            # Select Action A using a uniform random policy
-            A = random_policy(rnd)
-
-            # Apply action A to current maze, get reward R, and new state S'
-            obs, R, _ = curr_maze.play(A)
-            S_prime = parse_obs(obs, nrow, ncol)
-
-        for j in range(state_len):
-            Phi_pi[S, j] = Phi_pi[S, j] + alpha*(indicator(S,j) + gamma*Phi_pi[S_prime, j] - Phi_pi[S, j])
-            V_pi[S] = V_pi[S] + alpha*(R + gamma*V_pi[S_prime] - V_pi[S])
-
-        experience = {'S': S,
-                      'A': A,
-                      'R': R,
-                      'S_prime': S_prime
-                      }
-
-        result[step] = {'Phi_pi': Phi_pi.copy(),
-                        'V_pi': V_pi.copy(),
-                        'experience': experience
-                        }
-
-        # Update to new state
-        S = S_prime
-
-        step += 1
-        episode_step += 1
-
-    return result
-
-
-def run_learning_sr_switch(config):
-
-    # Initializations
+    switch_reward = config['switch_reward']
     maze_type = config['maze_type']
     terminal_step = config['terminal_step']
     switch_step = config['switch_reward_at_step']
@@ -191,8 +88,6 @@ def run_learning_sr_switch(config):
     gamma = config['learning_alg_params']['gamma']
 
     state_len = nrow*ncol
-    action_len = 4
-    reward_len = 2
 
     # Don't need all these guys
     rnd = np.random.RandomState(24)
@@ -209,14 +104,12 @@ def run_learning_sr_switch(config):
     episode_step = 0
     result = OrderedDict()
 
-    cum_reward = 0
-    cum_reward_lst = []
-
     Phi_pi = np.zeros((state_len, state_len))
     V_pi = np.zeros((state_len,1))
     result['config'] = config
 
     while step < terminal_step:
+
         # Reset episode:
         if episode_step >= episode_len:
             S = xy2flat(start_row, start_col)
@@ -228,29 +121,35 @@ def run_learning_sr_switch(config):
             episode += 1
 
         # The maze evolves after switch_step:
-        if step <= switch_step:
-            curr_maze = maze_init
-        else:
-            old_row, old_col = curr_maze._sprites_and_drapes['P']._virtual_row, \
-                               curr_maze._sprites_and_drapes['P']._virtual_col
+        if switch_reward:
+            if step <= switch_step:
+                curr_maze = maze_init
+            else:
+                old_row, old_col = \
+                             curr_maze._sprites_and_drapes['P']._virtual_row, \
+                             curr_maze._sprites_and_drapes['P']._virtual_col
 
-            maze_update._sprites_and_drapes['P']._teleport((old_row, old_col))
-            curr_maze = maze_update
+                maze_update._sprites_and_drapes['P']._teleport((old_row, old_col))
+                curr_maze = maze_update
+
+        # Select Action A
+        A = random_policy(rnd)
 
         if curr_maze._game_over:
             A = random_policy(rnd)
             R = 0.
             S_prime = S
         else:
-            # Select Action A using a uniform random policy
-            A = random_policy(rnd)
-
             # Apply action A to current maze, get reward R, and new state S'
             obs, R, _ = curr_maze.play(A)
             S_prime = parse_obs(obs, nrow, ncol)
 
         for j in range(state_len):
-            Phi_pi[S, j] = Phi_pi[S, j] + alpha*(indicator(S,j) + gamma*Phi_pi[S_prime, j] - Phi_pi[S, j])
+            # Successor Representation Update
+            Phi_pi[S, j] = Phi_pi[S, j] + alpha*(indicator(S, j)
+                                                 + gamma*Phi_pi[S_prime, j]
+                                                 - Phi_pi[S, j])
+            # Value Update
             V_pi[S] = V_pi[S] + alpha*(R + gamma*V_pi[S_prime] - V_pi[S])
 
         experience = {'S': S,
@@ -259,8 +158,8 @@ def run_learning_sr_switch(config):
                       'S_prime': S_prime
                       }
 
-        result[step] = {'Phi_pi' : Phi_pi.copy(),
-                        'V_pi' : V_pi.copy(),
+        result[step] = {'Phi_pi': Phi_pi.copy(),
+                        'V_pi': V_pi.copy(),
                         'experience': experience
                         }
 

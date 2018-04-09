@@ -106,7 +106,7 @@ def compute_transition_mtx(config):
     return Trans_mtx
 
 
-def compute_reward_vector(config):
+def compute_reward_vector(config, ):
     maze_type = config['maze_type']
     nrow = config['maze_params']['row']
     ncol = config['maze_params']['col']
@@ -115,25 +115,42 @@ def compute_reward_vector(config):
 
     state_len = nrow*ncol
 
-    reward_vec = np.zeros((state_len, 1))
+    reward_vec_r1 = np.zeros((state_len, 1))
+    reward_vec_r2 = np.zeros((state_len, 1))
 
-    maze, _ = setup_maze(maze_type, start_row, start_col)
+    maze_r1, maze_r2  = setup_maze(maze_type, start_row, start_col)
 
     for x, y in product(range(1, nrow+1), range(1, ncol+1)):
         S = xy2flat(x, y, ncol)
 
         for a in range(4):
-            maze, _ = setup_maze(maze_type, start_row, start_col)
-            maze._sprites_and_drapes['P']._teleport((x, y))
-            if (x, y) == (nrow, ncol) or maze._game_over:
+            maze_r1, _ = setup_maze(maze_type, start_row, start_col)
+            maze_r1._sprites_and_drapes['P']._teleport((x, y))
+            if (x, y) == (nrow, ncol) or maze_r1._game_over:
                 R = 0.0
             else:
                 # Apply action A to current maze, get reward R, and new state S'
-                obs, R, _ = maze.play(a)
+                obs, R, _ = maze_r1.play(a)
 
-            reward_vec[S] += 0.25 * R
+            reward_vec_r1[S] += 0.25 * R
 
-    return reward_vec
+    maze_r1, maze_r2  = setup_maze(maze_type, start_row, start_col)
+
+    for x, y in product(range(1, nrow+1), range(1, ncol+1)):
+        S = xy2flat(x, y, ncol)
+
+        for a in range(4):
+            _, maze_r2 = setup_maze(maze_type, start_row, start_col)
+            maze_r2._sprites_and_drapes['P']._teleport((x, y))
+            if (x, y) == (nrow, ncol) or maze_r2._game_over:
+                R = 0.0
+            else:
+                # Apply action A to current maze, get reward R, and new state S'
+                obs, R, _ = maze_r2.play(a)
+
+            reward_vec_r2[S] += 0.25 * R
+
+    return reward_vec_r1, reward_vec_r2
 
 
 
@@ -213,7 +230,7 @@ def run_experiment(config):
 
         if curr_maze._game_over:
             A = random_policy(rnd)
-            R = 0. ## CAREFUL WITH THIS ACROSS REWARD FUNCTION CHANGES
+            R = 0.
             S_prime = S
         else:
             # Apply action A to current maze, get reward R, and new state S'

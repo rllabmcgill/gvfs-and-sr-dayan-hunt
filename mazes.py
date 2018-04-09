@@ -166,7 +166,7 @@ class BigMazeSpriteR2(prefab_sprites.MazeWalker):
 
         # See if we've found the goal:
         if self.position == (10, 10):
-            the_plot.add_reward(1.0)
+            the_plot.add_reward(10.0)
             the_plot.terminate_episode()
             # print("Terminating episode..")
             # time.sleep(10)

@@ -5,28 +5,38 @@ import argparse
 import numpy as np
 from math import sqrt
 import matplotlib.pyplot as plt
+from itertools import product
 from collections import OrderedDict
 
-twobytwo_R1 = ['####',
-               '#P #',
-               '# G#',
-               '####']
+twobytwo = ['####',
+            '#P #',
+            '# G#',
+            '####']
 
-twobytwo_R2 = ['####',
-               '#P #',
-               '# G#',
-               '####']
+tenbyten = ['############',
+            '#P         #',
+            '#          #',
+            '#          #',
+            '#          #',
+            '#          #',
+            '#          #',
+            '#          #',
+            '#          #',
+            '#          #',
+            '#         G#',
+            '############']
 
 
-def flat2xy(f):
+
+def flat2xy(f, ncol):
     f = f + 1  # f indexes from 0, gridworld indexes from 1
     y = f % ncol
     x = (f-y)/ncol + 1
     return x, y
 
 
-def xy2flat(x, y):
-    f = (x-1)*9+y
+def xy2flat(x, y, ncol):
+    f = (x-1)*ncol+y
     f = f - 1  # f indexes from 0, gridworld indexes from 1
     return f
 
@@ -47,8 +57,12 @@ def parse_obs(obs, nrow, ncol):
 def setup_maze(maze_type, start_row, start_col):
 
     if maze_type == 'twobytwo':
-        maze_init = mazes.make_maze(twobytwo_R1, 'twobytwo_R1')
-        maze_update = mazes.make_maze(twobytwo_R2, 'twobytwo_R2')
+        maze_init = mazes.make_maze(twobytwo, 'twobytwo_R1')
+        maze_update = mazes.make_maze(twobytwo, 'twobytwo_R2')
+
+    elif maze_type == 'tenbyten':
+        maze_init = mazes.make_maze(tenbyten, 'tenbyten_R1')
+        maze_update = mazes.make_maze(tenbyten, 'tenbyten_R2')
 
     # Place engines in play mode
     maze_init.its_showtime()
@@ -60,6 +74,35 @@ def setup_maze(maze_type, start_row, start_col):
 
     return maze_init, maze_update
 
+def compute_transition_mtx(config):
+    maze_type = config['maze_type']
+    nrow = config['maze_params']['row']
+    ncol = config['maze_params']['col']
+    start_row = config['maze_params']['start_row']
+    start_col = config['maze_params']['start_col']
+
+    state_len = nrow*ncol
+
+    Trans_mtx = np.zeros((state_len, state_len))
+
+    maze, _ = setup_maze(maze_type, start_row, start_col)
+
+    for x, y in product(range(1,nrow+1), range(1,ncol+1)):
+        S = xy2flat(x, y, ncol)
+
+        for a in range(4):
+            maze, _ = setup_maze(maze_type, start_row, start_col)
+            maze._sprites_and_drapes['P']._teleport((x, y))
+            if (x,y) == (nrow, ncol) or maze._game_over:
+                S_prime = xy2flat(nrow, ncol, ncol)
+            else:
+                # Apply action A to current maze, get reward R, and new state S'
+                obs, R, _ = maze.play(a)
+                S_prime = parse_obs(obs, nrow, ncol)
+
+            Trans_mtx[S,S_prime] += 0.25
+
+    return Trans_mtx
 
 # Indicator Function
 def indicator(s, j):
@@ -92,7 +135,7 @@ def run_experiment(config):
     # Don't need all these guys
     rnd = np.random.RandomState(24)
 
-    S = xy2flat(start_row, start_col)
+    S = xy2flat(start_row, start_col, ncol)
     S_prime = S
 
     # Initialize mazes (r_1, r_2) and agent at starting position
@@ -112,7 +155,7 @@ def run_experiment(config):
 
         # Reset episode:
         if episode_step >= episode_len:
-            S = xy2flat(start_row, start_col)
+            S = xy2flat(start_row, start_col, ncol)
             S_prime = S
             maze_init, maze_update = setup_maze(maze_type, start_row, start_col)
             curr_maze = maze_init # only doing this to reset the agent to the starting position, the next if statement will actually correct the map if need be
@@ -137,7 +180,7 @@ def run_experiment(config):
 
         if curr_maze._game_over:
             A = random_policy(rnd)
-            R = 0.
+            R = 0. ## CAREFUL WITH THIS ACROSS REWARD FUNCTION CHANGES
             S_prime = S
         else:
             # Apply action A to current maze, get reward R, and new state S'

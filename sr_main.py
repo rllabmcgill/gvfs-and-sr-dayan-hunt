@@ -74,6 +74,7 @@ def setup_maze(maze_type, start_row, start_col):
 
     return maze_init, maze_update
 
+
 def compute_transition_mtx(config):
     maze_type = config['maze_type']
     nrow = config['maze_params']['row']
@@ -87,22 +88,54 @@ def compute_transition_mtx(config):
 
     maze, _ = setup_maze(maze_type, start_row, start_col)
 
-    for x, y in product(range(1,nrow+1), range(1,ncol+1)):
+    for x, y in product(range(1, nrow+1), range(1, ncol+1)):
         S = xy2flat(x, y, ncol)
 
         for a in range(4):
             maze, _ = setup_maze(maze_type, start_row, start_col)
             maze._sprites_and_drapes['P']._teleport((x, y))
-            if (x,y) == (nrow, ncol) or maze._game_over:
+            if (x, y) == (nrow, ncol) or maze._game_over:
                 S_prime = xy2flat(nrow, ncol, ncol)
             else:
                 # Apply action A to current maze, get reward R, and new state S'
                 obs, R, _ = maze.play(a)
                 S_prime = parse_obs(obs, nrow, ncol)
 
-            Trans_mtx[S,S_prime] += 0.25
+            Trans_mtx[S, S_prime] += 0.25
 
     return Trans_mtx
+
+
+def compute_reward_vector(config):
+    maze_type = config['maze_type']
+    nrow = config['maze_params']['row']
+    ncol = config['maze_params']['col']
+    start_row = config['maze_params']['start_row']
+    start_col = config['maze_params']['start_col']
+
+    state_len = nrow*ncol
+
+    reward_vec = np.zeros((state_len, 1))
+
+    maze, _ = setup_maze(maze_type, start_row, start_col)
+
+    for x, y in product(range(1, nrow+1), range(1, ncol+1)):
+        S = xy2flat(x, y, ncol)
+
+        for a in range(4):
+            maze, _ = setup_maze(maze_type, start_row, start_col)
+            maze._sprites_and_drapes['P']._teleport((x, y))
+            if (x, y) == (nrow, ncol) or maze._game_over:
+                R = 0.0
+            else:
+                # Apply action A to current maze, get reward R, and new state S'
+                obs, R, _ = maze.play(a)
+
+            reward_vec[S] += 0.25 * R
+
+    return reward_vec
+
+
 
 # Indicator Function
 def indicator(s, j):

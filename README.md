@@ -15,7 +15,7 @@ git clone https://github.com/rllabmcgill/gvfs-and-sr-dayan-hunt.git
 ```
 
 ### Files and Folders:
-- **.ipynb** : The main report containing all the results 
+- **assignment_report_track2.ipynb** : The main report containing all the results 
 - **core/**
     - **sr_main.py** : The base file containing all the functions necessary for the assignment.
     - **mazes.py** : An interface for the pycolab game engine.
